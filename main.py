@@ -9,9 +9,12 @@ import json
 
 app = FastAPI()
 
+@app.get("/")
+def home():
+    return {"message": "Perhaps, You're lost buddy"}
+
 @app.get("/merge-images-to-pdf")
 async def merge_images_to_pdf(urls: str = Query(...)):
-
   try:
       decoded_urls = json.loads(unquote(urls))
       images = []
@@ -31,3 +34,6 @@ async def merge_images_to_pdf(urls: str = Query(...)):
   except Exception as e:
       print(e)
       return {"error": "An error occurred while processing the images."}, 500
+
+if __name__ == "__main__":
+    uvicorn.run("main:app", host="0.0.0.0", port=os.getenv("PORT", default=5000), log_level="info")
