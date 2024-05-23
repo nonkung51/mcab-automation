@@ -5,6 +5,7 @@ from PIL import Image
 from io import BytesIO
 from fastapi.responses import StreamingResponse
 from urllib.parse import unquote
+import uvicorn
 import json
 
 app = FastAPI()
