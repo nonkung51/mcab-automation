@@ -38,4 +38,4 @@ async def merge_images_to_pdf(urls: str = Query(...)):
       return {"error": "An error occurred while processing the images."}, 500
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=os.getenv("PORT", default=8000), log_level="info")
+    uvicorn.run("main:app", host="0.0.0.0", port=os.getenv("PORT", default=8000))
