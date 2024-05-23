@@ -5,9 +5,7 @@ from PIL import Image
 from io import BytesIO
 from fastapi.responses import StreamingResponse
 from urllib.parse import unquote
-import uvicorn
 import json
-import os
 
 app = FastAPI()
 
@@ -36,6 +34,3 @@ async def merge_images_to_pdf(urls: str = Query(...)):
   except Exception as e:
       print(e)
       return {"error": "An error occurred while processing the images."}, 500
-
-if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=os.getenv("PORT", default=8000))
