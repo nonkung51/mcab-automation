@@ -5,6 +5,7 @@ from PIL import Image
 from io import BytesIO
 from fastapi.responses import StreamingResponse
 from urllib.parse import unquote
+from zipfile import ZipFile
 import json
 
 app = FastAPI()
@@ -34,3 +35,29 @@ async def merge_images_to_pdf(urls: str = Query(...)):
   except Exception as e:
       print(e)
       return {"error": "An error occurred while processing the images."}, 500
+
+
+@app.get("/merge-images-to-zip")
+async def zip_images(urls: str = Query(...)):
+    try:
+        decoded_urls = json.loads(unquote(urls))
+        zip_bytes = BytesIO()
+        
+        with ZipFile(zip_bytes, 'w') as zip_file:
+            for i, url in enumerate(decoded_urls):
+                print("Downloading...", url)
+                response = requests.get(url)
+                img = Image.open(BytesIO(response.content))
+                img_bytes = BytesIO()
+                img.save(img_bytes, format='PNG')
+                img_bytes.seek(0)
+                zip_file.writestr(f'page{i+1}.png', img_bytes.read())
+        
+        zip_bytes.seek(0)
+        
+        return StreamingResponse(zip_bytes, media_type='application/zip', headers={"Content-Disposition": "attachment; filename=images.zip"})
+        
+    except Exception as e:
+        print(e)
+        return {"error": "An error occurred while processing the images."}, 500
+
