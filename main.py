@@ -1,63 +1,80 @@
-from fastapi import FastAPI, Query
-from typing import List
+import os
 import requests
-from PIL import Image
-from io import BytesIO
-from fastapi.responses import StreamingResponse
-from urllib.parse import unquote
-from zipfile import ZipFile
-import json
+from dotenv import load_dotenv
+from supabase import create_client, Client
+from tqdm import tqdm
 
-app = FastAPI()
+load_dotenv('.env.local')
 
-@app.get("/")
-def home():
-    return {"message": "Perhaps, You're lost buddy"}
+url: str = os.getenv("SUPABASE_URL")
+key: str = os.getenv("SUPABASE_KEY")
 
-@app.get("/merge-images-to-pdf")
-async def merge_images_to_pdf(urls: str = Query(...)):
-  try:
-      decoded_urls = json.loads(unquote(urls))
-      images = []
-      
-      for url in decoded_urls:
-          print("Downloading...", url)
-          response = requests.get(url)
-          img = Image.open(BytesIO(response.content))
-          images.append(img.convert("RGB"))
-      
-      pdf_bytes = BytesIO()
-      images[0].save(pdf_bytes, format='PDF', save_all=True, append_images=images[1:])
-      pdf_bytes.seek(0)
-      
-      return StreamingResponse(pdf_bytes, media_type='application/pdf', headers={"Content-Disposition": "attachment; filename=merged_images.pdf"})
-      
-  except Exception as e:
-      print(e)
-      return {"error": "An error occurred while processing the images."}, 500
+supabase: Client = create_client(url, key)
+
+def download_pictures_by_book_id(book_id: str):
+    order_data = (
+        supabase.from_("book_orders")
+        .select("child_images, child_name, order_seq_number")
+        .match({"book": book_id})
+        .single()
+        .execute()
+    )
+
+    order_seq_number = str(order_data.data["order_seq_number"]).zfill(4)
+    child_name = order_data.data["child_name"]
+    order_number = f"{order_seq_number} {child_name}"
+
+    # Create the directory if it doesn't exist
+    if not os.path.exists(os.path.join("downloads", order_number)):
+        os.makedirs(os.path.join("downloads", order_number))
+
+    book_data = (
+        supabase.from_("book_books").select("*").eq("id", book_id).single().execute()
+    )
+
+    pages = book_data.data["pages"]
+    for page in tqdm(pages, desc="downloading pages", leave=False):
+        page_data = (
+            supabase.from_("book_pages")
+            .select("page_number, status, output_url, comfy_storage_url, output_from")
+            .eq("id", page)
+            .single().execute()
+        )
+
+        page_number = page_data.data["page_number"]
+        status = page_data.data["status"]
+        output_url = page_data.data["output_url"]
+        comfy_storage_url = page_data.data["comfy_storage_url"]
+        output_from = page_data.data["output_from"]
+
+        # Determine the URL to download from
+        download_url = comfy_storage_url if comfy_storage_url else output_url
+        # Define the file path
+        file_path = os.path.join(os.path.join("downloads", order_number), f"page{page_number}.png")
+
+        if comfy_storage_url:
+            response = requests.get(comfy_storage_url)
+            if response.status_code == 200:
+                with open(file_path, 'wb') as file:
+                    file.write(response.content)
+        else:
+            with open(file_path, 'wb+') as file:
+                response = supabase.storage.from_('mychildartbook').download(output_url)
+                file.write(response)
 
 
-@app.get("/merge-images-to-zip")
-async def zip_images(urls: str = Query(...)):
-    try:
-        decoded_urls = json.loads(unquote(urls))
-        zip_bytes = BytesIO()
-        
-        with ZipFile(zip_bytes, 'w') as zip_file:
-            for i, url in enumerate(decoded_urls):
-                print("Downloading...", url)
-                response = requests.get(url)
-                img = Image.open(BytesIO(response.content))
-                img_bytes = BytesIO()
-                img.save(img_bytes, format='PNG')
-                img_bytes.seek(0)
-                zip_file.writestr(f'page{i+1}.png', img_bytes.read())
-        
-        zip_bytes.seek(0)
-        
-        return StreamingResponse(zip_bytes, media_type='application/zip', headers={"Content-Disposition": "attachment; filename=images.zip"})
-        
-    except Exception as e:
-        print(e)
-        return {"error": "An error occurred while processing the images."}, 500
+if __name__ == "__main__":
+    book_ids = []
+    print("input book ids (newline-separated). press \"enter\" twice to finish:")
+    while True:
+        book_id = input()
+        if book_id == "":
+            break
+        book_ids.append(book_id)
+
+    print("start downloading bruh!")
+    for book_id in tqdm(book_ids, desc="downloading books", leave=True):
+        book_id = book_id.strip()
+        if book_id:
+            download_pictures_by_book_id(book_id=book_id)
 
