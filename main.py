@@ -47,20 +47,11 @@ def download_pictures_by_book_id(book_id: str):
         comfy_storage_url = page_data.data["comfy_storage_url"]
         output_from = page_data.data["output_from"]
 
-        # Determine the URL to download from
-        download_url = comfy_storage_url if comfy_storage_url else output_url
-        # Define the file path
         file_path = os.path.join(os.path.join("downloads", order_number), f"page{page_number}.png")
 
-        if comfy_storage_url:
-            response = requests.get(comfy_storage_url)
-            if response.status_code == 200:
-                with open(file_path, 'wb') as file:
-                    file.write(response.content)
-        else:
-            with open(file_path, 'wb+') as file:
-                response = supabase.storage.from_('mychildartbook').download(output_url)
-                file.write(response)
+        with open(file_path, 'wb+') as file:
+            response = supabase.storage.from_('mychildartbook').download(output_url)
+            file.write(response)
 
 
 if __name__ == "__main__":
@@ -77,4 +68,3 @@ if __name__ == "__main__":
         book_id = book_id.strip()
         if book_id:
             download_pictures_by_book_id(book_id=book_id)
-
