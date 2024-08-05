@@ -49,9 +49,12 @@ def download_pictures_by_book_id(book_id: str):
 
         file_path = os.path.join(os.path.join("downloads", order_number), f"page{page_number}.png")
 
-        with open(file_path, 'wb+') as file:
-            response = supabase.storage.from_('mychildartbook').download(output_url)
-            file.write(response)
+        try:
+            with open(file_path, 'wb+') as file:
+                response = supabase.storage.from_('mychildartbook').download(output_url)
+                file.write(response)
+        except Exception as e:
+            print(f"Failed to download page {page_number}: {e}")
 
 
 if __name__ == "__main__":
