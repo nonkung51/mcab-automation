@@ -2,3 +2,6 @@
 .env.local
 __pycache__
 downloads
+img_to_replace.png
+batch_order_images/*
+order_batches.csv
