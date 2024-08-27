@@ -68,7 +68,7 @@ def insert_order_to_supabase(payload):
 
 
 def prepare_payload(row):
-    email = row["email"]
+    email = row["\ufeffemail"]
     child_name = row["childName"]
     gender = row["gender"]
     book_template = row["bookTemplate"]
@@ -102,7 +102,7 @@ def prepare_payload(row):
 
 
 def process_csv(file_path):
-    with open(file_path, newline="") as csvfile:
+    with open(file_path, newline="", encoding="utf-8") as csvfile:
         reader = csv.DictReader(csvfile)
         for row in reader:
             try:

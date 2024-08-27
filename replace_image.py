@@ -43,4 +43,5 @@ def replace_image(order_id: str, file_path: str):
 
 if __name__ == "__main__":
     book_id = input("input order id: ")
-    replace_image(book_id, "img_to_replace.png")
+    img_directory = input("input img dir: ")
+    replace_image(book_id, img_directory)
