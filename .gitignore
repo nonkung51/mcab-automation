@@ -1,7 +1,8 @@
-.env
+venv
 .env.local
 __pycache__
 downloads
+generated
 img_to_replace.png
 batch_order_images/*
 order_batches.csv
