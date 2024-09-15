@@ -1,4 +1,4 @@
-import csv
+import json
 import os
 from supabase import create_client, Client
 import uuid
@@ -12,7 +12,7 @@ SUPABASE_URL: str = os.getenv("SUPABASE_URL")
 SUPABASE_KEY: str = os.getenv("SUPABASE_KEY")
 
 SUPABASE_BUCKET = "mychildartbook"
-CSV_FILE = "order_batches.csv"
+JSON_FILE = "order_batches.json"
 
 # Create a Supabase client
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -58,8 +58,8 @@ def insert_order_to_supabase(payload):
                 "jean@mychildartbook.com",
                 "bow@mychildartbook.com",
             ],
-            "subject": f"form for {str(order_data.data["order_seq_number"]).zfill(4)} {order_data.data["child_name"]} is filled",
-            "html": f"""<div><p>children's pic (น้อง{order_data.data["child_name"]}): <a href="{storage_output_url["signedURL"]}">here</a></p><img src="{storage_output_url["signedURL"]}" alt="Image" style="width: 500px;" /><div>""",
+            "subject": f"form for {str(order_data.data['order_seq_number']).zfill(4)} {order_data.data['child_name']} is filled",
+            "html": f"""<div><p>children's pic (น้อง{order_data.data['child_name']}): <a href="{storage_output_url['signedURL']}">here</a></p><img src="{storage_output_url['signedURL']}" alt="Image" style="width: 500px;" /><div>""",
         }
 
         email = resend.Emails.send(params)
@@ -68,7 +68,7 @@ def insert_order_to_supabase(payload):
 
 
 def prepare_payload(row):
-    email = row["\ufeffemail"]
+    email = row["email"]
     child_name = row["childName"]
     gender = row["gender"]
     book_template = row["bookTemplate"]
@@ -95,16 +95,16 @@ def prepare_payload(row):
         "receiver_facebook": receiver_facebook,
         "receiver_phone": receiver_phone,
         "receiver_address": receiver_address,
-        "consent_for_promoting": consent_for_promoting.lower() == "yes",
+        "consent_for_promoting": consent_for_promoting,
     }
 
     return payload
 
 
-def process_csv(file_path):
-    with open(file_path, newline="", encoding="utf-8") as csvfile:
-        reader = csv.DictReader(csvfile)
-        for row in reader:
+def process_json(file_path):
+    with open(file_path, "r", encoding="utf-8") as jsonfile:
+        data = json.load(jsonfile)
+        for row in data:
             try:
                 payload = prepare_payload(row)
                 insert_order_to_supabase(payload)
@@ -113,4 +113,4 @@ def process_csv(file_path):
 
 
 if __name__ == "__main__":
-    process_csv(CSV_FILE)
+    process_json(JSON_FILE)
