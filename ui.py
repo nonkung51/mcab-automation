@@ -141,10 +141,9 @@ def main():
             if os.path.isdir(os.path.join(download_folder, f))
         ]
         selected_file = st.selectbox("choose a folder to convert to pdf, matey:", png_folders)
-        book_name = st.text_input("enter book name, savvy:")
         if st.button("convert to pdf, arrr!"):
             pngs_to_pdf(
-                png_folder=f"downloads/{folder_path}", output_pdf=f"generated/{book_name}.pdf"
+                png_folder=f"downloads/{selected_file}", output_pdf=f"generated/{selected_file}.pdf"
             )
             st.success("pdf created, shiver me timbers!")
 
