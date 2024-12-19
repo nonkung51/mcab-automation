@@ -4,6 +4,9 @@ import requests
 from PIL import Image
 from dotenv import load_dotenv
 from supabase import create_client, Client
+from reportlab.pdfgen import canvas
+from reportlab.lib.units import mm
+import io
 
 load_dotenv(".env.local")
 
@@ -13,83 +16,38 @@ key: str = os.getenv("SUPABASE_KEY")
 supabase: Client = create_client(url, key)
 
 
-def download_pictures_by_book_id(order_id: str):
-    order_data = (
-        supabase.from_("book_orders")
-        .select("child_images, child_name, book")
-        .match({"order_seq_number": order_id})
-        .single()
-        .execute()
-    )
+def download_pictures_by_book_id(order_id: str, indentification: str):
+    # Call API to get order data
+    url = "https://order.mychildartbook.com/api/books/admin/get-images-urls"
+    querystring = {"orderId": order_id, "indentification": indentification}
+    response = requests.get(url, params=querystring)
+    if response.status_code != 200:
+        raise Exception(f"API request failed with status code {response.status_code}")
+    data = response.json()
 
-    order_seq_number = str(order_id).zfill(4)
-    book_id = order_data.data["book"]
-    child_name = order_data.data["child_name"]
-    order_number = f"{order_seq_number} {child_name}"
+    order_number = data["orderNumber"]
 
     # Create the directory if it doesn't exist
     if not os.path.exists(os.path.join("downloads", order_number)):
         os.makedirs(os.path.join("downloads", order_number))
 
-    book_data = (
-        supabase.from_("book_books").select("*").eq("id", book_id).single().execute()
-    )
-
-    pages = book_data.data["pages"]
-    for page in pages:
-        page_data = (
-            supabase.from_("book_pages")
-            .select("page_number, status, output_url, comfy_storage_url, output_from")
-            .eq("id", page)
-            .single()
-            .execute()
-        )
-
-        page_number = page_data.data["page_number"]
-        status = page_data.data["status"]
-        output_url = page_data.data["output_url"]
-        comfy_storage_url = page_data.data["comfy_storage_url"]
-        output_from = page_data.data["output_from"]
+    for page in data["pages"]:
+        page_number = page["pageNumber"]
+        output_url = page["outputUrl"]
 
         file_path = os.path.join(
             os.path.join("downloads", order_number), f"page{page_number}.png"
         )
 
         try:
+            # Download the image from the output URL
+            response = requests.get(output_url)
+            response.raise_for_status()
+            
             with open(file_path, "wb+") as file:
-                response = supabase.storage.from_("mychildartbook").download(output_url)
-                file.write(response)
+                file.write(response.content)
         except Exception as e:
             print(f"Failed to download page {page_number}: {e}")
-
-
-def replace_image(order_id: str, file_path: str):
-    order_data = (
-        supabase.from_("book_orders")
-        .select("child_images, child_name, order_seq_number")
-        .match({"order_seq_number": order_id})
-        .single()
-        .execute()
-    )
-
-    child_images = order_data.data.get("child_images", [])
-    if len(child_images) == 0:
-        raise "Image not found!"
-
-    storage_path = child_images[0]
-
-    try:
-        # Upload the file to Supabase storage
-        with open(file_path, "rb") as file:
-            response = supabase.storage.from_("mychildartbook").update(
-                file=file, path=storage_path, file_options={"content-type": "image/jpg"}
-            )
-
-        print(f"Image uploaded successfully to {storage_path}")
-        return storage_path
-    except Exception as e:
-        print(f"Failed to upload image: {e}")
-        return None
 
 
 def pngs_to_pdf(png_folder: str, output_pdf: str):
@@ -110,28 +68,88 @@ def pngs_to_pdf(png_folder: str, output_pdf: str):
     if images:
         images[0].save(output_pdf, save_all=True, append_images=images[1:])
 
+def mm_to_pixels(mm_value, dpi=300):
+    """Convert millimeters to pixels at given DPI"""
+    return int((mm_value / 25.4) * dpi)
+
+def pngs_to_pdf_us(png_folder: str, output_pdf: str):
+    try:
+        # Create PDF with precise page sizes
+        c = canvas.Canvas(output_pdf)
+
+        # Process page1.png with special dimensions
+        page1_path = os.path.join(png_folder, "page1.png")
+        if os.path.exists(page1_path):
+            # Calculate dimensions in points (1 point = 1/72 inch)
+            width_pts = 478.0 * mm
+            height_pts = 326.0 * mm
+            c.setPageSize((width_pts, height_pts))
+            
+            # Calculate pixel dimensions for 300 DPI
+            width_px = mm_to_pixels(478.0)
+            height_px = mm_to_pixels(326.0)
+            
+            # Draw image at exact dimensions
+            c.drawImage(page1_path, 0, 0, width=width_pts, height=height_pts)
+            c.showPage()
+            print(f"Processed: page1.png (478.0 x 326.0 mm @ 300 DPI)")
+            print(f"Pixel dimensions: {width_px} x {height_px} px")
+        
+        # Process pages 2-35
+        for page_num in range(2, 36):
+            image_path = os.path.join(png_folder, f"page{page_num}.png")
+            if os.path.exists(image_path):
+                # Calculate dimensions in points
+                width_pts = 216.0 * mm
+                height_pts = 286.0 * mm
+                c.setPageSize((width_pts, height_pts))
+                
+                # Calculate pixel dimensions for 300 DPI
+                width_px = mm_to_pixels(216.0)
+                height_px = mm_to_pixels(286.0)
+                
+                # Draw image at exact dimensions
+                c.drawImage(image_path, 0, 0, width=width_pts, height=height_pts)
+                c.showPage()
+                print(f"Processed: page{page_num}.png (216.0 x 286.0 mm @ 300 DPI)")
+                print(f"Pixel dimensions: {width_px} x {height_px} px")
+            else:
+                print(f"Warning: page{page_num}.png not found")
+        
+        # Save the PDF
+        c.save()
+        print(f"\nPDF created successfully with correct dimensions and 300 DPI: {output_pdf}")
+        
+    except Exception as e:
+        print(f"Error creating PDF: {str(e)}")
+
 
 def main():
-    st.title("choose yer action, matey")
+    st.title("choose action:")
 
-    choices = ["download books", "replace young scallywag's image", "convert to pdf"]
-    choice = st.selectbox("select an action, ye landlubber:", choices)
+    indentification = st.text_input("enter indentification:")
+    choices = ["download books", "convert to pdf (th)", "convert to pdf (us)"]
+    choice = st.selectbox("select an action:", choices)
 
     if choice == choices[0]:
         order_id = st.text_input("enter order id, savvy:")
-        if st.button("download books, arrr!"):
-            download_pictures_by_book_id(order_id=order_id)
-            st.success("download set sail!")
+        if st.button("download books"):
+            download_pictures_by_book_id(order_id=order_id, indentification=indentification)
+            st.success("done")
 
     elif choice == choices[1]:
-        order_id = st.text_input("enter order id, savvy:")
-        file_path = st.file_uploader(
-            "choose the image file to replace, matey:", type=["jpg", "png"]
-        )
-        if st.button("replace image, aye!"):
-            if file_path is not None:
-                replace_image(order_id=order_id, file_path=file_path)
-                st.success("image replaced, ho ho!")
+        download_folder = "downloads"
+        png_folders = [
+            f
+            for f in os.listdir(download_folder)
+            if os.path.isdir(os.path.join(download_folder, f))
+        ]
+        selected_file = st.selectbox("choose a folder to convert to pdf:", png_folders)
+        if st.button("convert to pdf"):
+            pngs_to_pdf(
+                png_folder=f"downloads/{selected_file}", output_pdf=f"generated/{selected_file}.pdf"
+            )
+            st.success("pdf created")
 
     elif choice == choices[2]:
         download_folder = "downloads"
@@ -140,12 +158,13 @@ def main():
             for f in os.listdir(download_folder)
             if os.path.isdir(os.path.join(download_folder, f))
         ]
-        selected_file = st.selectbox("choose a folder to convert to pdf, matey:", png_folders)
-        if st.button("convert to pdf, arrr!"):
-            pngs_to_pdf(
-                png_folder=f"downloads/{selected_file}", output_pdf=f"generated/{selected_file}.pdf"
+        selected_file = st.selectbox("choose a folder to convert to pdf:", png_folders)
+        if st.button("convert to pdf"):
+            pngs_to_pdf_us(
+                png_folder=f"downloads/{selected_file}",
+                output_pdf=f"generated/{selected_file}.pdf",
             )
-            st.success("pdf created, shiver me timbers!")
+            st.success("pdf created")
 
 
 if __name__ == "__main__":
