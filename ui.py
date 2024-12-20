@@ -2,18 +2,8 @@ import streamlit as st
 import os
 import requests
 from PIL import Image
-from dotenv import load_dotenv
-from supabase import create_client, Client
 from reportlab.pdfgen import canvas
 from reportlab.lib.units import mm
-import io
-
-load_dotenv(".env.local")
-
-url: str = os.getenv("SUPABASE_URL")
-key: str = os.getenv("SUPABASE_KEY")
-
-supabase: Client = create_client(url, key)
 
 
 def download_pictures_by_book_id(order_id: str, indentification: str):
